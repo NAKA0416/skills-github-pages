@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Word-Quest(Lessson3)</title>
+  <style>
+    body { font-family: sans-serif; background: #f0f0f0; margin: 0; padding: 20px; text-align: center; }
+    .section { display: none; margin-top: 20px; }
+    .hp-bar { height: 20px; width: 100%; background: #ccc; margin: 10px 0; border-radius: 10px; overflow: hidden; }
+    .hp-fill { height: 100%; background: #4caf50; width: 100%; transition: width 0.3s; }
+    button { padding: 10px 20px; margin: 10px; font-size: 16px; }
+    .option-btn { display: block; margin: 10px auto; width: 80%; }
+    .character { font-size: 24px; margin: 10px 0; }
+    .character-img { max-height: 100px; margin-bottom: 10px; }
+  </style>
+</head>
+<body>
+  <h1>Word-Quest(Lesson 3)</h1>
+ <input type="file" id="fileInput" accept=".xlsx">
+
+  <div class="question-area">
+    <div class="character">
+      <img src="勇者.png" alt="勇者" class="character-img"><br>あなた
+
+    </div>
+    <div>あなたのHP:</div>
+    <div class="hp-bar"><div id="player-hp" class="hp-fill"></div></div>
+    <div class="character">
+      <img id="enemy-img" src="スライム.PNG.png" alt="スライム" class="character-img"><br>モンスター
+    </div>
+    <div>敵のHP:</div>
+    <div class="hp-bar"><div id="enemy-hp" class="hp-fill"></div></div>
+    <h3 id="question-text"></h3>
+    <div id="options"></div>
+  </div>
+
+  <!-- 結果画面 -->
+  <div id="result-area" class="section">
+    <h2 id="result-message"></h2>
+    <button onclick="backToStageSelection()">ステージ選択に戻る</button>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script>
+    class WordEntry {
+      constructor(level, word, meaning) {
+        this.level = level;
+        this.word = word;
+        this.meaning = meaning;
+      }
+    }
+
+    const allWords = {1: [], 2: [], 3: [], 4: [], 5: []};
+    let currentQuestions = [];
+    let currentIndex = 0;
+    let correctCount = 0;
+    let playerHP = 100;
+    let enemyHP = 100;
+
+    const hpBar = (element, hp) => element.style.width = Math.max(hp, 0) + '%';
+
+    function showSection(id) {
+      document.querySelectorAll('.section').forEach(sec => sec.style.display = 'none');
+      document.getElementById(id).style.display = 'block';
+    }
+
+    function createStageButtons() {
+      const container = document.getElementById('stage-buttons');
+      container.innerHTML = '';
+      for (let i = 1; i <= 5; i++) {
+        const btn = document.createElement('button');
+        btn.textContent = `ステージ 1-${i}`;
+        btn.onclick = () => startGame(i);
+        container.appendChild(btn);
+      }
+    }
+
+    function startGame(stageNum) {
+      currentQuestions = getQuestions(stageNum);
+      currentIndex = 0;
+      correctCount = 0;
+      playerHP = 100;
+      enemyHP = 100;
+
+      document.getElementById('enemy-img').src = 'スライム.PNG.png';
+
+      showSection('question-area');
+      updateHPBars();
+      showQuestion();
+    }
+
+    function showQuestion() {
+      const q = currentQuestions[currentIndex];
+      document.getElementById('question-text').textContent = `「${q.meaning}」に合う英単語を選ぼう`;
+
+      const options = document.getElementById('options');
+      options.innerHTML = '';
+      q.options.forEach((opt, i) => {
+        const btn = document.createElement('button');
+        btn.className = 'option-btn';
+        btn.textContent = `${i+1}. ${opt}`;
+        btn.onclick = () => checkAnswer(opt);
+        options.appendChild(btn);
+      });
+    }
+
+    function checkAnswer(selected) {
+      const correct = currentQuestions[currentIndex].correct;
+      if (selected === correct) {
+        correctCount++;
+        enemyHP -= Math.floor(100 / 10);
+      } else {
+        playerHP -= 20;
+      }
+      updateHPBars();
+
+      if (correctCount >= 10) {
+        showResult('勝利！');
+      } else if (playerHP <= 0) {
+        showResult('ゲームオーバー');
+      } else {
+        currentIndex++;
+        if (currentIndex < currentQuestions.length) {
+          showQuestion();
+        } else {
+          showResult('ゲーム終了');
+        }
+      }
+    }
+
+    function updateHPBars() {
+      hpBar(document.getElementById('player-hp'), playerHP);
+      hpBar(document.getElementById('enemy-hp'), enemyHP);
+    }
+
+    function showResult(message) {
+      document.getElementById('result-message').textContent = message;
+      showSection('result-area');
+    }
+
+    function backToStageSelection() {
+      showSection('stage-selection');
+    }
+
+    function getQuestions(stageNum) {
+      const pool = [...allWords[1]];  // フロア1のみ
+      const maxQuestions = Math.min(30, pool.length);
+      const selected = [];
+      const used = new Set();
+      while (selected.length < maxQuestions && used.size < pool.length) {
+        const idx = Math.floor(Math.random() * pool.length);
+        const word = pool[idx];
+        if (used.has(word.word)) continue;
+        used.add(word.word);
+
+        const distractors = pool.filter(w => w.word !== word.word);
+        const options = [word.word, ...distractors.sort(() => 0.5 - Math.random()).slice(0, 3).map(w => w.word)];
+        selected.push({
+          meaning: word.meaning,
+          correct: word.word,
+          options: options.sort(() => 0.5 - Math.random())
+        });
+      }
+      return selected;
+    }
+
+    document.getElementById('fileInput').addEventListener('change', handleFile);
+
+    function handleFile(e) {
+      const file = e.target.files[0];
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        const data = new Uint8Array(e.target.result);
+        const workbook = XLSX.read(data, {type: 'array'});
+        const sheetName = workbook.SheetNames[0];
+        const sheet = workbook.Sheets[sheetName];
+        const json = XLSX.utils.sheet_to_json(sheet);
+        json.forEach(row => {
+          const level = parseInt(row.Level);
+          const word = row.English;
+          const meaning = row.Meaning;
+          if (level >= 1 && level <= 5) {
+            allWords[level].push(new WordEntry(level, word, meaning));
+          }
+        });
+        createStageButtons();
+        showSection('stage-selection');
+      };
+      reader.readAsArrayBuffer(file);
+    }
+  </script>
+</body>
+</html>
